@@ -1,0 +1,56 @@
+{
+  "id": 3387,
+  "security_notice_no": "CTyunOS-SA-2021-1011",
+  "notice_url": "https://ctyunos.ctyun.cn/#/support/safetyDetail?id=CTyunOS-SA-2021-1011",
+  "summary": "golang security update",
+  "type": 2,
+  "affected_product": "ctyunos-2.0.1",
+  "affected_component": "golang",
+  "announcement_time": "2021-02-08",
+  "description": "The Go Programming Language.\\r\\n\\r\\n\nSecurity Fix(es):\\r\\n\\r\\n\nThe encoding/xml package in Go (all versions) does not correctly preserve the semantics of attribute namespace prefixes during tokenization round-trips, which allows an attacker to craft inputs that behave in conflicting ways during different stages of processing in affected downstream applications.(CVE-2020-29509)\\r\\n\\r\\n",
+  "introduction": "An update for golang is now available for   CTyunOS 2.0.1",
+  "cve_list": [{
+    "url": "https://ctyunos.ctyun.cn/#/support/cveDetail?id=CVE-2020-29509",
+    "cve_id": "CVE-2020-29509"
+  }],
+  "files": [{
+    "arch": "x86_64",
+    "list": [{
+      "file_name": "golang",
+      "version": "1.15.7-33.ctl2",
+      "file_url": "https://repo.ctyun.cn/hostos/ctyunos-2.0.1/update/x86_64/Packages/golang-1.15.7-33/golang-1.15.7-33.ctl2.x86_64.rpm"
+    }]
+  }, {
+    "arch": "noarch",
+    "list": [{
+      "file_name": "golang-devel",
+      "version": "1.15.7-33.ctl2",
+      "file_url": "https://repo.ctyun.cn/hostos/ctyunos-2.0.1/update/x86_64/Packages/golang-1.15.7-33/golang-devel-1.15.7-33.ctl2.noarch.rpm"
+    }, {
+      "file_name": "golang-help",
+      "version": "1.15.7-33.ctl2",
+      "file_url": "https://repo.ctyun.cn/hostos/ctyunos-2.0.1/update/x86_64/Packages/golang-1.15.7-33/golang-help-1.15.7-33.ctl2.noarch.rpm"
+    }, {
+      "file_name": "golang-devel",
+      "version": "1.15.7-33.ctl2",
+      "file_url": "https://repo.ctyun.cn/hostos/ctyunos-2.0.1/update/x86_64/Packages/golang-1.15.7-33/golang-devel-1.15.7-33.ctl2.noarch.rpm"
+    }, {
+      "file_name": "golang-help",
+      "version": "1.15.7-33.ctl2",
+      "file_url": "https://repo.ctyun.cn/hostos/ctyunos-2.0.1/update/x86_64/Packages/golang-1.15.7-33/golang-help-1.15.7-33.ctl2.noarch.rpm"
+    }]
+  }, {
+    "arch": "aarch64",
+    "list": [{
+      "file_name": "golang",
+      "version": "1.15.7-33.ctl2",
+      "file_url": "https://repo.ctyun.cn/hostos/ctyunos-2.0.1/update/aarch64/Packages/golang-1.15.7-33/golang-1.15.7-33.ctl2.aarch64.rpm"
+    }]
+  }],
+  "reference_list": [{
+    "url": "https://nvd.nist.gov/vuln/detail/CVE-2020-29509"
+  }, {
+    "url": "https://www.cnnvd.org.cn/home/globalSearch?keyword=CVE-2020-29509"
+  }],
+  "subject": "An update for golang is now available for   CTyunOS 2.0.1.\\r\\n\\r\\n\nCTyunOS Security has rated this update as having a security impact of medium. A Common Vunlnerability Scoring System(CVSS)base score,which gives a detailed severity rating, is available for each vulnerability from the CVElink(s) in the References section."
+}
