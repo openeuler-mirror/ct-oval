@@ -8,7 +8,7 @@ Leon Wang <wangl29@chinatelecom.cn><br>
 Yong Qin <qiny15@chinatelecom.cn><br>
 Copyright 2024 Chinatelecom CTyun Ltd.<br>
 
-# Base commnads & Global flags
+# Base commands & Global flags
 CTyunOS OVAL CLI<br>
 Usage:<br>
   ct-oval [flags]<br>
