@@ -68,7 +68,7 @@ func GenRpmInfoTests(ovals []*ent.Oval) []RPMinfoTest {
 	testlist = common.RemoveDuplication(testlist)
 	for _, testid := range testlist {
 		ret, _ := db.Test.Query().Where(test.TestIDEQ(testid)).First(context.Background())
-		//填入3级测试package is earier than
+		//填入3级测试package is earlier than
 		var rpminfoObject = RPMinfoTest{
 			ID:      ret.TestID,
 			Version: common.OvalVersion,
