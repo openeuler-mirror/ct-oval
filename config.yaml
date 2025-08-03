@@ -1,0 +1,50 @@
+# config.yaml
+
+dbtype: sqlite
+sqlite:
+  path: "./sqlite.db"
+
+postgres:
+  host: "localhost"
+  port: "5432"
+  user: "..."
+  dbname: "..."
+  password: "..."
+
+common:
+  ctyun_os_id:        "oval:cn.ctyun.ctyunos"
+  definition_prefix:  ":def:"
+  test_prefix:        ":tst:"
+  object_prefix:      ":obj:"
+  state_prefix:       ":ste:"
+
+  oval:
+    def:               "http://oval.mitre.org/XMLSchema/oval-definitions-5"
+    common:            "http://oval.mitre.org/XMLSchema/oval-common-5"
+    unix:              "http://oval.mitre.org/XMLSchema/oval-definitions-5#unix"
+    linux:             "http://oval.mitre.org/XMLSchema/oval-definitions-5#linux"
+    independent:       "http://oval.mitre.org/XMLSchema/oval-definitions-5#independent"
+    xsi:               "http://www.w3.org/2001/XMLSchema-instance"
+    xsi_schema_location: >
+      http://oval.mitre.org/XMLSchema/oval-common-5 oval-common-schema.xsd
+      http://oval.mitre.org/XMLSchema/oval-definitions-5 oval-definitions-schema.xsd
+      http://oval.mitre.org/XMLSchema/oval-definitions-5#unix unix-definitions-schema.xsd
+      http://oval.mitre.org/XMLSchema/oval-definitions-5#linux linux-definitions-schema.xsd
+
+  references:
+    cve_base: "https://ctyunos.ctyun.cn/#/support/cveDetail?id="
+    sa_base:  "https://ctyunos.ctyun.cn/#/support/safetyDetail?id="
+    cvelist:  "https://ctyunos.ctyun.cn/ctadmin/official/support/security-notice/"
+
+  product:
+    host:             "ctyunos.ctyun.cn"
+    sa_source:        "CTyunOS-SA"
+    name:             "CTyunOS Linux"
+    version:          "v1.0.0"
+    schema_version:   "5.11"
+    oval_version:     "506"
+    copyright:        "Copyright 2024 CTyunOS Linux, Inc."
+    class:            "patch"
+    family:           "unix"
+    versions:         "2.0.1 23.01"
+    arch:             "x86_64 aarch64"
