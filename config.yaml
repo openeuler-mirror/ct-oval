@@ -12,7 +12,7 @@ postgres:
   password: "..."
 
 common:
-  ctyun_os_id:        "oval:cn.ctyun.ctyunos"
+  os_id:        "oval:org.openeuler"
   definition_prefix:  ":def:"
   test_prefix:        ":tst:"
   object_prefix:      ":obj:"
@@ -32,9 +32,9 @@ common:
       http://oval.mitre.org/XMLSchema/oval-definitions-5#linux linux-definitions-schema.xsd
 
   references:
-    cve_base: "https://ctyunos.ctyun.cn/#/support/cveDetail?id="
-    sa_base:  "https://ctyunos.ctyun.cn/#/support/safetyDetail?id="
-    cvelist:  "https://ctyunos.ctyun.cn/ctadmin/official/support/security-notice/"
+    cve_base: "https://www.openeuler.org/en/security/cve/detail/?cveId="
+    sa_base:  "https://www.openeuler.org/en/security/security-bulletins/detail/?id="
+    cvelist:  "https://repo.openeuler.org/security/data/osv/"
 
   product:
     host:             "ctyunos.ctyun.cn"

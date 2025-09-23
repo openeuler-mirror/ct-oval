@@ -184,7 +184,7 @@ func GenerateID(dbname string, value string, client *ent.Client) (string, error)
 		if object == nil {
 			num, _ := client.Object.Query().Count(context.Background())
 			//common obj number start with "3", openscap required non Zero start
-			newID := "oval:cn.ctyun.ctyunos:obj:" + fmt.Sprintf("3%011d", num)
+			newID := common.OSObjectStr + fmt.Sprintf("3%011d", num)
 			obj, _ := client.Object.Create().SetObjectID(newID).SetName(value).Save(context.Background())
 			return obj.ObjectID, err
 		} else {
@@ -195,7 +195,7 @@ func GenerateID(dbname string, value string, client *ent.Client) (string, error)
 		if state == nil {
 			num, _ := client.State.Query().Count(context.Background())
 			//common ste number start with "3", openscap required non Zero start
-			newID := "oval:cn.ctyun.ctyunos:ste:" + fmt.Sprintf("3%011d", num)
+			newID := common.OSStateStr + fmt.Sprintf("3%011d", num)
 			state, _ := client.State.Create().SetStateID(newID).SetValue(value).SetTag("evr").SetOperation("less than").SetDatatype("evr_string").Save(context.Background())
 			return state.StateID, err
 		} else {
@@ -206,7 +206,7 @@ func GenerateID(dbname string, value string, client *ent.Client) (string, error)
 		if test == nil {
 			num, _ := client.Test.Query().Count(context.Background())
 			//common tst number start with "3", openscap required non Zero start
-			newID := "oval:cn.ctyun.ctyunos:tst:" + fmt.Sprintf("3%011d", num)
+			newID := common.OSTestStr + fmt.Sprintf("3%011d", num)
 			items := strings.Split(value, " ")
 			obj, _ := client.Object.Query().Where(object.NameEQ(items[0])).First(context.Background())
 			state, _ := client.State.Query().Where(state.ValueEQ(items[len(items)-1])).First(context.Background())
@@ -270,160 +270,238 @@ func WriteState(version string, client *ent.Client) error {
 	return nil
 }
 
+
+// ProcessAdvisoryFile orchestrates parsing a file and writing it to the database.
+func ProcessAdvisoryFile(filePath string) (string, error) {
+    // Use the parser to get the unified data
+    var parser AdvisoryParser = &CSAFParser{}
+    unifiedAdvisory, err := parser.Parse(filePath)
+    if err != nil {
+        return "", fmt.Errorf("failed to parse advisory file: %w", err)
+    }
+
+    // Connect to the database (and handle seeding, as in the original)
+    db, err := common.ConnectDB()
+    if err != nil {
+        return "", fmt.Errorf("failed to connect to database: %w", err)
+    }
+    defer db.Close()
+
+    // Process packages to create Object, State, and Test records
+    var object_list, state_list, test_list string
+    
+    for _, product := range unifiedAdvisory.Products {
+        for _, pkg := range product.Packages {
+            // Write individual records to the DB and get their IDs
+            if err := WriteObject(pkg.Name, db); err != nil { return "", err }
+            if err := WriteState(pkg.FixedVersion, db); err != nil { return "", err }
+            tid, err := WriteTest(pkg.Name+" is earlier than "+pkg.FixedVersion, db)
+            if err != nil { return "", err }
+
+            object_list += pkg.Name + " "
+            state_list += pkg.FixedVersion + " "
+            test_list += tid + " "
+        }
+    }
+    
+    // Build the SecurityNotice struct for WriteOval
+    securityNotice := SecurityNotice{
+        // --- Data from UnifiedAdvisory ---
+        ID:               unifiedAdvisory.ID,
+        Title:            unifiedAdvisory.CVEs[0] + " " + unifiedAdvisory.Title,
+        Description:      unifiedAdvisory.Description,
+        AdvisorySeverity: unifiedAdvisory.Severity,
+        AdvisoryIssued:   unifiedAdvisory.IssuedDate,
+        Reference:        strings.Join(unifiedAdvisory.CVEs, " "),
+        AffectedPlatform: unifiedAdvisory.Products[0].Name, // Or logic to combine names
+
+        // --- Static/Config Data from 'common' package ---
+        ProductName:    common.ProductName,
+        ProductVersion: common.ProductVersion,
+        SchemaVersion:  common.SchemaVersion,
+        Version:        common.OvalVersion,
+        Class:          common.Class,
+        AffectedFamily: common.Family,
+        AdvisoryRights: common.CopyRights,
+        Archlist:       common.Archlist,
+
+        // --- Data from Step 3 (processed packages) ---
+        Object: strings.TrimSpace(object_list),
+        State:  strings.TrimSpace(state_list),
+        Test:   strings.TrimSpace(test_list),
+    }
+
+    // Call WriteOval with the fully constructed struct
+    if _, err := WriteOval(securityNotice, db); err != nil {
+        return "", fmt.Errorf("failed to write oval records: %w", err)
+    }
+
+    return securityNotice.ID, nil
+}
+
+
 // HandleSecurityNotice 处理安全通知，并存入数据库
 // 参数 jsonSecNotice JsonSecurityNotice 类型，包含安全通知的 JSON 结构体
 // 返回值 SecurityNotice 类型，表示处理后的安全通知信息结构体
 // 返回值 error 类型，表示处理过程中可能出现的错误
-func HandleSecurityNotice(jsonSecNotice JsonSecurityNotice) (string, error) {
-	// 连接数据库
-	if jsonSecNotice.SecurityNoticeNo == "" {
-		return "", fmt.Errorf("input of HandleSecurityNotice is empty")
-	}
-	db, err := common.ConnectDB()
-	if err != nil {
-		return "", fmt.Errorf("failed to connect database: %v", err)
-	}
-	defer db.Close()
+// func HandleSecurityNotice(jsonSecNotice JsonSecurityNotice) (string, error) {
+// 	// 连接数据库
+// 	if jsonSecNotice.SecurityNoticeNo == "" {
+// 		return "", fmt.Errorf("input of HandleSecurityNotice is empty")
+// 	}
+// 	db, err := common.ConnectDB()
+// 	if err != nil {
+// 		return "", fmt.Errorf("failed to connect database: %v", err)
+// 	}
+// 	defer db.Close()
 
-	//如果Test表是新建的，则初始化入系统安装（2级），架构判断（1级）的测试。未来package的检测均为3级
-	num, _ := db.Test.Query().Count(context.Background())
-	if num == 0 {
-		log.Debug("Initializing tests table...")
-		for id, product := range strings.Split(common.Productlist, " ") {
-			db.Test.Create().SetComment("CTyunOS " + product + " is installed").SetTestID(fmt.Sprintf("oval:cn.ctyun.ctyunos:tst:20000000000%d", id+1)).SetObjectID("oval:cn.ctyun.ctyunos:obj:100000000001").SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:20000000000%d", id+1)).Save(context.Background())
-		}
-		for id, arch := range strings.Split(common.Archlist, " ") {
-			db.Test.Create().SetComment(fmt.Sprintf("CTyunOS Linux arch is %s", arch)).SetTestID(fmt.Sprintf("oval:cn.ctyun.ctyunos:tst:10000000000%d", id+1)).SetObjectID("oval:cn.ctyun.ctyunos:obj:100000000001").SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:10000000000%d", id+1)).Save(context.Background())
-		}
-	}
-	//如果Object表是新建的，则初始化入ctyunos-release, 它被产品安装及架构安装检测所共用
-	num, _ = db.Object.Query().Count(context.Background())
-	if num == 0 {
-		log.Debug("Initializing objects table...")
-		db.Object.Create().SetName("ctyunos-release").SetObjectID("oval:cn.ctyun.ctyunos:obj:100000000001").Save(context.Background())
-	}
-	//如果State表是新建的，则初始化入系统安装状态值为product，架构判断状态值arch
-	num, _ = db.State.Query().Count(context.Background())
-	if num == 0 {
-		log.Debug("Initializing state table...")
-		for id, product := range strings.Split(common.Productlist, " ") {
-			db.State.Create().SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:20000000000%d", id+1)).SetDatatype("string").SetOperation("pattern match").SetTag("version").SetValue(product).Save(context.Background())
-		}
-		for id, arch := range strings.Split(common.Archlist, " ") {
-			db.State.Create().SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:10000000000%d", id+1)).SetDatatype("string").SetOperation("pattern match").SetTag("arch").SetValue(arch).Save(context.Background())
-		}
-	}
+// 	//如果Test表是新建的，则初始化入系统安装（2级），架构判断（1级）的测试。未来package的检测均为3级
+// 	num, _ := db.Test.Query().Count(context.Background())
+// 	if num == 0 {
+// 		log.Debug("Initializing tests table...")
+// 		for id, product := range strings.Split(common.Productlist, " ") {
+// 			db.Test.Create().SetComment(common.ProductName + product + " is installed").
+// 			SetTestID(fmt.Sprintf(common.OSTestStr + "20000000000%d", id+1)).
+// 			SetObjectID(common.OSObjectStr + "100000000001").
+// 			SetStateID(fmt.Sprintf(common.OSStateStr + "20000000000%d", id+1)).Save(context.Background())
+// 		}
+// 		for id, arch := range strings.Split(common.Archlist, " ") {
+// 			db.Test.Create().SetComment(fmt.Sprintf(common.ProductName +  "arch is %s", arch)).
+// 			SetTestID(fmt.Sprintf(common.OSTestStr + "10000000000%d", id+1)).
+// 			SetObjectID(common.OSObjectStr + "100000000001").
+// 			SetStateID(fmt.Sprintf(common.OSStateStr + "10000000000%d", id+1)).Save(context.Background())
+// 		}
+// 	}
+// 	//如果Object表是新建的，则初始化入ctyunos-release, 它被产品安装及架构安装检测所共用
+// 	num, _ = db.Object.Query().Count(context.Background())
+// 	if num == 0 {
+// 		log.Debug("Initializing objects table...")
+// 		db.Object.Create().SetName(common.ProductName + "-release").SetObjectID(common.OSObjectStr + "100000000001").Save(context.Background())
+// 	}
+// 	//如果State表是新建的，则初始化入系统安装状态值为product，架构判断状态值arch
+// 	num, _ = db.State.Query().Count(context.Background())
+// 	if num == 0 {
+// 		log.Debug("Initializing state table...")
+// 		for id, product := range strings.Split(common.Productlist, " ") {
+// 			db.State.Create().SetStateID(fmt.Sprintf(common.OSStateStr + "20000000000%d", id+1)).
+// 			SetDatatype("string").SetOperation("pattern match").SetTag("version").SetValue(product).Save(context.Background())
+// 		}
+// 		for id, arch := range strings.Split(common.Archlist, " ") {
+// 			db.State.Create().SetStateID(fmt.Sprintf(common.OSStateStr + "10000000000%d", id+1)).
+// 			SetDatatype("string").SetOperation("pattern match").SetTag("arch").SetValue(arch).Save(context.Background())
+// 		}
+// 	}
 
-	// 初始化 SecurityNotice 结构体，先查在db中是否已经存在，若不存在，将SecurityNotice内数据写入数据表oval
-	ovalid := common.CTyunOSDefinitionStr + strings.ReplaceAll(jsonSecNotice.AnnouncementTime, "-", "")
-	ret := GetOvalID(ovalid, db)
-	if ret == "" {
-		// 初始化安全通知引用信息，并添加到 Reference 中，安全公告页面（CTyunOS-SA）有且仅有一条，特殊地放在第一位
-		var References []SecurityNoticeReference
-		SaRef := SecurityNoticeReference{
-			Source: "CTyunOS-SA",
-			RefId:  jsonSecNotice.SecurityNoticeNo,
-			RefUrl: jsonSecNotice.NoticeURL,
-		}
-		References = append(References, SaRef)
+// 	// 初始化 SecurityNotice 结构体，先查在db中是否已经存在，若不存在，将SecurityNotice内数据写入数据表oval
+// 	ovalid := common.OSDefinitionStr + strings.ReplaceAll(jsonSecNotice.AnnouncementTime, "-", "")
+// 	ret := GetOvalID(ovalid, db)
+// 	if ret == "" {
+// 		// 初始化安全通知引用信息，并添加到 Reference 中，安全公告页面（CTyunOS-SA）有且仅有一条，特殊地放在第一位
+// 		var References []SecurityNoticeReference
+// 		SaRef := SecurityNoticeReference{
+// 			Source: common.SaSource,
+// 			RefId:  jsonSecNotice.SecurityNoticeNo,
+// 			RefUrl: jsonSecNotice.NoticeURL,
+// 		}
+// 		References = append(References, SaRef)
 
-		// 遍历 CVE 列表，添加 CVE 信息到 securityNoticeReferences， 排在2至n位
-		cve_list := ""
-		for _, cve := range jsonSecNotice.CVEList {
-			cve_list += cve.CveID + " "
-			referenceCve := SecurityNoticeReference{
-				Source: "CVE",
-				RefId:  cve.CveID,
-				RefUrl: cve.URL,
-			}
-			References = append(References, referenceCve)
-		}
+// 		// 遍历 CVE 列表，添加 CVE 信息到 securityNoticeReferences， 排在2至n位
+// 		cve_list := ""
+// 		for _, cve := range jsonSecNotice.CVEList {
+// 			cve_list += cve.CveID + " "
+// 			referenceCve := SecurityNoticeReference{
+// 				Source: "CVE",
+// 				RefId:  cve.CveID,
+// 				RefUrl: cve.URL,
+// 			}
+// 			References = append(References, referenceCve)
+// 		}
 
-		// 将References内数据写入数据表reference
-		err = WriteReference(References, db)
-		if err != nil {
-			fmt.Println("failed to write reference records:", err)
-			return "", err
-		}
+// 		// 将References内数据写入数据表reference
+// 		err = WriteReference(References, db)
+// 		if err != nil {
+// 			fmt.Println("failed to write reference records:", err)
+// 			return "", err
+// 		}
 
-		//分解Files中的数据，写入数据库
-		object_list := ""
-		state_list := ""
-		test_list := ""
-		for _, file := range jsonSecNotice.Files[0].List {
-			// fmt.Println(file.FileName)
-			// fmt.Println(file.Version)
-			// fmt.Println(file.FileURL)
-			var version = file.Version
-			if file.Version == "" {
-				str := strings.Split(file.FileURL, "/")
-				myRegexp := regexp.MustCompile("-[0-9].[0-9.A-z]*-[0-9.A-z]+.ctl[0-9]")
-				params := myRegexp.FindStringSubmatch(str[len(str)-1])
-				if params == nil {
-					log.Error(str[len(str)-1] + " is not valid regex package name\n")
-				}
-				version = "0:" + params[0][1:]
-			}
-			object_list += file.FileName + " "
-			state_list += version + " "
-			err = WriteObject(file.FileName, db)
-			if err != nil {
-				return "", err
-			}
-			err = WriteState(version, db)
-			if err != nil {
-				return "", err
-			}
-			testid, err := WriteTest(file.FileName+" is earlier than "+version, db)
-			test_list += testid + " "
-			if err != nil {
-				return "", err
-			}
-		}
+// 		//分解Files中的数据，写入数据库
+// 		object_list := ""
+// 		state_list := ""
+// 		test_list := ""
+// 		for _, file := range jsonSecNotice.Files[0].List {
+// 			// fmt.Println(file.FileName)
+// 			// fmt.Println(file.Version)
+// 			// fmt.Println(file.FileURL)
+// 			var version = file.Version
+// 			if file.Version == "" {
+// 				str := strings.Split(file.FileURL, "/")
+// 				myRegexp := regexp.MustCompile("-[0-9].[0-9.A-z]*-[0-9.A-z]+.ctl[0-9]")
+// 				params := myRegexp.FindStringSubmatch(str[len(str)-1])
+// 				if params == nil {
+// 					log.Error(str[len(str)-1] + " is not valid regex package name\n")
+// 				}
+// 				version = "0:" + params[0][1:]
+// 			}
+// 			object_list += file.FileName + " "
+// 			state_list += version + " "
+// 			err = WriteObject(file.FileName, db)
+// 			if err != nil {
+// 				return "", err
+// 			}
+// 			err = WriteState(version, db)
+// 			if err != nil {
+// 				return "", err
+// 			}
+// 			testid, err := WriteTest(file.FileName+" is earlier than "+version, db)
+// 			test_list += testid + " "
+// 			if err != nil {
+// 				return "", err
+// 			}
+// 		}
 
-		// 枚举Type为Severity
-		var severity = ""
-		switch jsonSecNotice.Type {
-		case 1:
-			severity = "low"
-		case 2:
-			severity = "medium"
-		case 3:
-			severity = "high"
-		case 4:
-			severity = "critical"
-		default:
-			severity = "unknown"
-		}
-		var securityNotice = SecurityNotice{
-			ID:               ovalid,
-			ProductName:      common.ProductName,
-			ProductVersion:   common.ProductVersion,
-			SchemaVersion:    common.SchemaVersion,
-			Version:          common.OvalVersion,
-			Class:            common.Class,
-			Title:            jsonSecNotice.SecurityNoticeNo + " " + jsonSecNotice.Summary,
-			Description:      jsonSecNotice.Description,
-			AffectedFamily:   common.Family,
-			AffectedPlatform: jsonSecNotice.AffectedProduct,
-			AdvisorySeverity: severity,
-			AdvisoryRights:   common.CopyRights,
-			AdvisoryIssued:   jsonSecNotice.AnnouncementTime,
-			Archlist:         common.Archlist,
-			Reference:        strings.TrimRight(cve_list, " "),
-			Object:           strings.TrimRight(object_list, " "),
-			State:            strings.TrimRight(state_list, " "),
-			Test:             strings.TrimRight(test_list, " "),
-		}
-		_, err = WriteOval(securityNotice, db)
-		if err != nil {
-			fmt.Println("failed to write oval records:", err)
-			return "", err
-		}
-		return securityNotice.ID, nil
-	}
-	return ret, nil
-}
+// 		// 枚举Type为Severity
+// 		var severity = ""
+// 		switch jsonSecNotice.Type {
+// 		case 1:
+// 			severity = "low"
+// 		case 2:
+// 			severity = "medium"
+// 		case 3:
+// 			severity = "high"
+// 		case 4:
+// 			severity = "critical"
+// 		default:
+// 			severity = "unknown"
+// 		}
+// 		var securityNotice = SecurityNotice{
+// 			ID:               ovalid,
+// 			ProductName:      common.ProductName,
+// 			ProductVersion:   common.ProductVersion,
+// 			SchemaVersion:    common.SchemaVersion,
+// 			Version:          common.OvalVersion,
+// 			Class:            common.Class,
+// 			Title:            jsonSecNotice.SecurityNoticeNo + " " + jsonSecNotice.Summary,
+// 			Description:      jsonSecNotice.Description,
+// 			AffectedFamily:   common.Family,
+// 			AffectedPlatform: jsonSecNotice.AffectedProduct,
+// 			AdvisorySeverity: severity,
+// 			AdvisoryRights:   common.CopyRights,
+// 			AdvisoryIssued:   jsonSecNotice.AnnouncementTime,
+// 			Archlist:         common.Archlist,
+// 			Reference:        strings.TrimRight(cve_list, " "),
+// 			Object:           strings.TrimRight(object_list, " "),
+// 			State:            strings.TrimRight(state_list, " "),
+// 			Test:             strings.TrimRight(test_list, " "),
+// 		}
+// 		_, err = WriteOval(securityNotice, db)
+// 		if err != nil {
+// 			fmt.Println("failed to write oval records:", err)
+// 			return "", err
+// 		}
+// 		return securityNotice.ID, nil
+// 	}
+// 	return ret, nil
+// }
 
 // ParseSecNoticeFromJson 从指定的JSON文件中解析安全通知
 // 参数:
@@ -431,15 +509,16 @@ func HandleSecurityNotice(jsonSecNotice JsonSecurityNotice) (string, error) {
 // 返回值:
 // - error: 如果解析过程中遇到错误，则返回error；否则返回nil
 func ParseSecNoticeFromJson(filePath string) error {
-	// 解析json文件，放入JsonSecurityNotice结构体中
-	jsonSecurityNotice, err := parseJSONFile(filePath)
-	if err != nil {
-		log.Debug(jsonSecurityNotice)
-		return err // 如果解析文件时出错，则打印错误信息并返回错误
-	}
+	// // 解析json文件，放入JsonSecurityNotice结构体中
+	// jsonSecurityNotice, err := parseJSONFile(filePath)
+	// if err != nil {
+	// 	log.Debug(jsonSecurityNotice)
+	// 	return err // 如果解析文件时出错，则打印错误信息并返回错误
+	// }
 
-	// 将JsonSecurityNotice结构体数据写入ovals cverefs objects states tests数据表
-	ovalid, err := HandleSecurityNotice(jsonSecurityNotice)
+	// // 将JsonSecurityNotice结构体数据写入ovals cverefs objects states tests数据表
+	// ovalid, err := HandleSecurityNotice(jsonSecurityNotice)
+	ovalid, err := ProcessAdvisoryFile(filePath)
 	if err != nil {
 		return err // 如果处理数据时出错，则打印错误信息并返回错误
 	}

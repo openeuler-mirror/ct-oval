@@ -15,11 +15,11 @@ var log = logger.GetLogger()
 
 // Config‑driven variables (formerly consts)
 var (
-	CTyunOSId            string
-	CTyunOSDefinitionStr string
-	CTyunOSTestStr       string
-	CTyunOSObjectStr     string
-	CTyunOSStateStr      string
+	OSId            string
+	OSDefinitionStr string
+	OSTestStr       string
+	OSObjectStr     string
+	OSStateStr      string
 
 	OvalDef           string
 	OvalCommon        string
@@ -70,11 +70,11 @@ func init() {
 	}
 
 	// 3) Populate vars from config
-	CTyunOSId = sub.GetString("ctyun_os_id")
-	CTyunOSDefinitionStr = CTyunOSId + sub.GetString("definition_prefix")
-	CTyunOSTestStr = CTyunOSId + sub.GetString("test_prefix")
-	CTyunOSObjectStr = CTyunOSId + sub.GetString("object_prefix")
-	CTyunOSStateStr = CTyunOSId + sub.GetString("state_prefix")
+	OSId = sub.GetString("os_id")
+	OSDefinitionStr = OSId + sub.GetString("definition_prefix")
+	OSTestStr = OSId + sub.GetString("test_prefix")
+	OSObjectStr = OSId + sub.GetString("object_prefix")
+	OSStateStr = OSId + sub.GetString("state_prefix")
 
 	OvalDef = sub.GetString("oval.def")
 	OvalCommon = sub.GetString("oval.common")
