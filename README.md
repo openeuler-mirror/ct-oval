@@ -4,7 +4,7 @@ Then generate xml file according to DB, with filter options.<br>
 The output xml file can be used as openscap source file. Check systems whether have vulnerabilities.<br>
 
 # Contributors
-Leon Wang <wangl29@chinatelecom.cn><br>
+Leon Wang <wonleing@163.com><br>
 Yong Qin <qiny15@chinatelecom.cn><br>
 Copyright 2024 Chinatelecom CTyun Ltd.<br>
 
@@ -68,38 +68,10 @@ Available Commands:
   powershell  Generate the autocompletion script for powershell<br>
   zsh         Generate the autocompletion script for zsh<br>
 
-# Const config
-Notice: API URL, productlist and archlist currently are hard coded in common.go.
-You can change them and recompile the project if needed. These configs are:<br>
-  - CTyunOSId = "oval:cn.ctyun.ctyunos"
-  - CTyunOSDefinitionStr = CTyunOSId + ":def:"
-  - CTyunOSTestStr = CTyunOSId + ":tst:"
-  - CTyunOSObjectStr = CTyunOSId + ":obj:"
-  - CTyunOSStateStr = CTyunOSId + ":ste:"
-  - OvalDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5"
-  - OvalCommon = "http://oval.mitre.org/XMLSchema/oval-common-5"
-  - OvalUnixDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5#unix"
-  - OvalRedDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5#linux"
-  - OvalIndDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5#independent"
-  - XmlSchemaInstance = "http://www.w3.org/2001/XMLSchema-instance"
-  - XSISchemaLocation = "http://oval.mitre.org/XMLSchema/oval-common-5 oval-common-schema.xsd" +
-	" http://oval.mitre.org/XMLSchema/oval-definitions-5 oval-definitions-schema.xsd" +
-	" http://oval.mitre.org/XMLSchema/oval-definitions-5#unix unix-definitions-schema.xsd" +
-	" http://oval.mitre.org/XMLSchema/oval-definitions-5#linux linux-definitions-schema.xsd"
-  - CveRef = "https://ctyunos.ctyun.cn/#/support/cveDetail?id="
-  - SaRef = "https://ctyunos.ctyun.cn/#/support/safetyDetail?id="
-  - CvelistAPI = "https://ctyunos.ctyun.cn/ctadmin/official/support/security-notice/"
-  - Host = "ctyunos.ctyun.cn"
-  - SaSource = "CTyunOS-SA"
-  - ProductName = "CTyunOS Linux"
-  - ProductVersion = "v1.0.0"
-  - SchemaVersion = "5.11"
-  - OvalVersion = "506"
-  - CopyRights = "Copyright 2024 CTyunOS Linux, Inc."
-  - Class = "patch"
-  - Family = "unix"
-  - Productlist = "2.0.1 23.01"
-  - Archlist = "x86_64 aarch64"
+# Different new OS adapt
+ clone and change config_<YourOS>.yaml
+ change KeySource in cmd/flag/flag.go, now available for openeuler and ctyun, you can add your own OS
+ change pkg/securitynotice/JsonData.go, add Parse<YourOS>Url function and update ParseRestfulUrl function
 
 # Unit tests
 To make sure tests passed, you need to delete sqlite.db before running unit tests in source directory

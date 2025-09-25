@@ -12,7 +12,7 @@ postgres:
   password: "..."
 
 common:
-  os_id:        "oval:org.openeuler"
+  os_id:        "oval:cn.openatom.openeuler"
   definition_prefix:  ":def:"
   test_prefix:        ":tst:"
   object_prefix:      ":obj:"
@@ -32,19 +32,19 @@ common:
       http://oval.mitre.org/XMLSchema/oval-definitions-5#linux linux-definitions-schema.xsd
 
   references:
-    cve_base: "https://www.openeuler.org/en/security/cve/detail/?cveId="
-    sa_base:  "https://www.openeuler.org/en/security/security-bulletins/detail/?id="
-    cvelist:  "https://repo.openeuler.org/security/data/osv/"
+    cve_base: "https://dl-cdn.openeuler.openatom.cn/security/data/csaf/cve/"
+    sa_base:  "https://dl-cdn.openeuler.openatom.cn/security/data/csaf/advisories/"
+    cvelist:  "https://dl-cdn.openeuler.openatom.cn/security/data/csaf/cve/index.txt"
 
   product:
-    host:             "ctyunos.ctyun.cn"
-    sa_source:        "CTyunOS-SA"
-    name:             "CTyunOS Linux"
+    host:             "openeuler.openatom.cn"
+    sa_source:        "Openeuler-SA"
+    name:             "Openeuler Linux"
     version:          "v1.0.0"
     schema_version:   "5.11"
     oval_version:     "506"
-    copyright:        "Copyright 2024 CTyunOS Linux, Inc."
+    copyright:        "Copyright Openeuler."
     class:            "patch"
     family:           "unix"
-    versions:         "2.0.1 23.01"
+    versions:         "24.03"
     arch:             "x86_64 aarch64"
