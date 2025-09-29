@@ -12,6 +12,7 @@ postgres:
   password: "..."
 
 common:
+  os_type:      "openeuler"
   os_id:        "oval:cn.openatom.openeuler"
   definition_prefix:  ":def:"
   test_prefix:        ":tst:"
@@ -35,6 +36,7 @@ common:
     cve_base: "https://dl-cdn.openeuler.openatom.cn/security/data/csaf/cve/"
     sa_base:  "https://dl-cdn.openeuler.openatom.cn/security/data/csaf/advisories/"
     cvelist:  "https://dl-cdn.openeuler.openatom.cn/security/data/csaf/cve/index.txt"
+    cvedetail: "https://dl-cdn.openeuler.openatom.cn/security/data/csaf/cve/"
 
   product:
     host:             "openeuler.openatom.cn"

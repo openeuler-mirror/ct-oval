@@ -5,6 +5,8 @@ import (
 	"context"
 	"ct_oval_tool/cmd/flag"
 	"ct_oval_tool/pkg/ent"
+	"ct_oval_tool/pkg/ent/oval"
+	"ct_oval_tool/pkg/ent/predicate"
 	"ct_oval_tool/pkg/logger"
 	"ct_oval_tool/pkg/ovalxml/common"
 	"ct_oval_tool/pkg/ovalxml/defintions"
@@ -16,9 +18,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"os"
-
-	"ct_oval_tool/pkg/ent/oval"
-	"ct_oval_tool/pkg/ent/predicate"
+	"unicode"
 
 	"github.com/spf13/viper"
 )
@@ -63,6 +63,34 @@ func GenOval(ovals []*ent.Oval) ovaldefinitions.OvalDefinitions {
 	return ovalDef
 }
 
+// 处理datefrom：4位数字补全为YYYY-01-01
+func processDateFrom(datefrom string) string {
+	if len(datefrom) != 4 {
+		return datefrom
+	}
+	// 检查是否全为数字
+	for _, c := range datefrom {
+		if !unicode.IsDigit(c) {
+			return datefrom
+		}
+	}
+	return datefrom + "-01-01"
+}
+
+// 处理dateto：4位数字补全为YYYY-12-31
+func processDateTo(dateto string) string {
+	if len(dateto) != 4 {
+		return dateto
+	}
+	// 检查是否全为数字
+	for _, c := range dateto {
+		if !unicode.IsDigit(c) {
+			return dateto
+		}
+	}
+	return dateto + "-12-31"
+}
+
 // GeneratedOvalXml 生成 OVAL 格式的 XML 文件。
 // 该函数不接受参数，也不返回任何值。
 // 主要步骤包括：
@@ -73,8 +101,8 @@ func GenOval(ovals []*ent.Oval) ovaldefinitions.OvalDefinitions {
 // 5. 将 XML 数据写入文件。
 func GeneratedOvalXml() error {
 	// 1. 依命令行flag查询符合条件的oval
-	datefrom := viper.GetString(flag.KeyDateFrom)
-	dateto := viper.GetString(flag.KeyDateTo)
+	datefrom := processDateFrom(viper.GetString(flag.KeyDateFrom))
+	dateto := processDateTo(viper.GetString(flag.KeyDateTo))
 	product := viper.GetString(flag.KeyProduct)
 	output := viper.GetString(flag.KeyOutputFile)
 	db, err := common.ConnectDB()
@@ -83,20 +111,23 @@ func GeneratedOvalXml() error {
 	}
 	defer db.Close()
 	log.Debug("Output file is: ", output)
-	log.Debug("DateFrom is: ", datefrom)
+	log.Debug("Filters are: ", datefrom, dateto, product)
 	filter := []predicate.Oval{oval.IssuedateGTE(datefrom)}
 	if dateto != "" {
 		log.Debug("DateTo is: ", dateto)
 		filter = append(filter, oval.IssuedateLTE(dateto))
 	}
-	if product != "all" {
+	if product != "" {
 		log.Debug("Only proceed product(platform): ", product)
 		filter = append(filter, oval.PlatformEQ(product))
 	}
 	ovals, err := db.Oval.Query().Where(filter...).All(context.Background())
+	//ovals, err := db.Oval.Query().All(context.Background())
+
 	if err != nil {
 		return fmt.Errorf("failed to query oval: %v", err)
 	}
+
 	// 2. 生成 oval 结构数据
 	var ovalDef = GenOval(ovals)
 

@@ -15,6 +15,7 @@ var log = logger.GetLogger()
 
 // Config‑driven variables (formerly consts)
 var (
+	OSType          string
 	OSId            string
 	OSDefinitionStr string
 	OSTestStr       string
@@ -32,6 +33,7 @@ var (
 	CveRef     string
 	SaRef      string
 	CvelistAPI string
+	CvedetailAPI string
 
 	Host           string
 	SaSource       string
@@ -71,11 +73,11 @@ func init() {
 
 	// 3) Populate vars from config
 	OSId = sub.GetString("os_id")
+	OSType = sub.GetString("os_type")
 	OSDefinitionStr = OSId + sub.GetString("definition_prefix")
 	OSTestStr = OSId + sub.GetString("test_prefix")
 	OSObjectStr = OSId + sub.GetString("object_prefix")
 	OSStateStr = OSId + sub.GetString("state_prefix")
-
 	OvalDef = sub.GetString("oval.def")
 	OvalCommon = sub.GetString("oval.common")
 	OvalUnixDef = sub.GetString("oval.unix")
@@ -87,6 +89,7 @@ func init() {
 	CveRef = sub.GetString("references.cve_base")
 	SaRef = sub.GetString("references.sa_base")
 	CvelistAPI = sub.GetString("references.cvelist")
+	CvedetailAPI = sub.GetString("references.cvedetail")
 
 	Host = sub.GetString("product.host")
 	SaSource = sub.GetString("product.sa_source")

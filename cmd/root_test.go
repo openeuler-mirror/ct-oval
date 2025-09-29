@@ -22,7 +22,7 @@ func TestNew(t *testing.T) {
 	// 	"dateTo":     "include elements revised on or before this day (format: YYYY-MM-DD)",
 	// 	"type":       "only match CVEs of this type (1-low 2-meduim 3-high 4-critical)",
 	// 	"keyword":    "only match CVEs contains this keyword (eg: openssl)",
-	// 	"outputFile": "the name of output xml file (eg: CTyunos-oval.xml)",
+	// 	"outputFile": "the name of output xml file (eg: oval_ouput.xml)",
 	// }
 
 	// for _, flag := range cmd.PersistentFlags() {

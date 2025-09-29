@@ -33,9 +33,9 @@ func New() *cobra.Command {
 
 	flags := cmd.PersistentFlags()
 	flags.BoolP(flag.KeyDebug, "d", false, "Enable debug messages")
-	flags.String(flag.KeyProduct, "ctyunos-2.0.1", "generate oval for a single product (eg: ctyunos-2.0.1 ctyunos-23.01)")
-	flags.String(flag.KeyDateFrom, "1990-01-01", "include elements revised on or after this day (format: YYYY-MM-DD)")
-	flags.String(flag.KeyDateTo, "", "include elements revised on or before this day (format: YYYY-MM-DD)")
+	flags.String(flag.KeyProduct, "", "generate oval for a single product (eg: ctyunos-2.0.1 openeuler-24.03)")
+	flags.String(flag.KeyDateFrom, "2023", "include elements revised on or after this day (format: YYYY-MM-DD)")
+	flags.String(flag.KeyDateTo, "2025", "include elements revised on or before this day (format: YYYY-MM-DD)")
 	viper.BindPFlags(flags)
 
 	parseJsonCmd := &cobra.Command{
@@ -95,7 +95,7 @@ func New() *cobra.Command {
 		},
 	}
 	options = generateXml.Flags()
-	options.String(flag.KeyOutputFile, "CTyunos-oval.xml", "the name of output xml file")
+	options.String(flag.KeyOutputFile, "oval_ouput.xml", "the name of output xml file")
 	viper.BindPFlags(options)
 
 	version := &cobra.Command{

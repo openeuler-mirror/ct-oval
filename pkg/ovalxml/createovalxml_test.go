@@ -52,7 +52,7 @@ func TestGeneratedOvalXml(t *testing.T) {
 	viper.Set(flag.KeyDateFrom, "2022-01-01")
 	viper.Set(flag.KeyDateTo, "2022-01-31")
 	viper.Set(flag.KeyProduct, "ImageMagick")
-	viper.Set(flag.KeyOutputFile, "CTyunos-oval.xml")
+	viper.Set(flag.KeyOutputFile, "oval_ouput.xml")
 
 	// Run the function to be tested
 	err := GeneratedOvalXml()
@@ -60,7 +60,7 @@ func TestGeneratedOvalXml(t *testing.T) {
 	// Assert the result
 	assert.NoError(t, err)
 	// Check if the file is created
-	_, err = os.Stat("CTyunos-oval.xml")
+	_, err = os.Stat("oval_ouput.xml")
 	assert.False(t, os.IsNotExist(err))
 	// TODO: Add more assertions for the content of the generated XML file
 }
