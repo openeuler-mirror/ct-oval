@@ -11,39 +11,98 @@ import (
 	"github.com/spf13/viper"
 )
 
-const CTyunOSId = "oval:cn.ctyun.ctyunos"
-const CTyunOSDefinitionStr = CTyunOSId + ":def:"
-const CTyunOSTestStr = CTyunOSId + ":tst:"
-const CTyunOSObjectStr = CTyunOSId + ":obj:"
-const CTyunOSStateStr = CTyunOSId + ":ste:"
-const OvalDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5"
-const OvalCommon = "http://oval.mitre.org/XMLSchema/oval-common-5"
-const OvalUnixDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5#unix"
-const OvalRedDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5#linux"
-const OvalIndDef = "http://oval.mitre.org/XMLSchema/oval-definitions-5#independent"
-const XmlSchemaInstance = "http://www.w3.org/2001/XMLSchema-instance"
-const XSISchemaLocation = "http://oval.mitre.org/XMLSchema/oval-common-5 oval-common-schema.xsd" +
-	" http://oval.mitre.org/XMLSchema/oval-definitions-5 oval-definitions-schema.xsd" +
-	" http://oval.mitre.org/XMLSchema/oval-definitions-5#unix unix-definitions-schema.xsd" +
-	" http://oval.mitre.org/XMLSchema/oval-definitions-5#linux linux-definitions-schema.xsd"
-const CveRef = "https://ctyunos.ctyun.cn/#/support/cveDetail?id="
-const SaRef = "https://ctyunos.ctyun.cn/#/support/safetyDetail?id="
-const CvelistAPI = "https://ctyunos.ctyun.cn/ctadmin/official/support/security-notice/"
-const Host = "ctyunos.ctyun.cn"
-const SaSource = "CTyunOS-SA"
-const ProductName = "CTyunOS Linux"
-const ProductVersion = "v1.0.0"
-const SchemaVersion = "5.11"
-const OvalVersion = "506"
-const CopyRights = "Copyright 2024 CTyunOS Linux, Inc."
-const Class = "patch"
-const Family = "unix"
-const Productlist = "2.0.1 23.01"
-const Archlist = "x86_64 aarch64"
-
 var log = logger.GetLogger()
-var DBstr = ""
-var CNstr = ""
+
+// Config‑driven variables (formerly consts)
+var (
+	OSType          string
+	OSId            string
+	OSDefinitionStr string
+	OSTestStr       string
+	OSObjectStr     string
+	OSStateStr      string
+
+	OvalDef           string
+	OvalCommon        string
+	OvalUnixDef       string
+	OvalRedDef        string
+	OvalIndDef        string
+	XmlSchemaInstance string
+	XSISchemaLocation string
+
+	CveRef     string
+	SaRef      string
+	CvelistAPI string
+	CvedetailAPI string
+
+	Host           string
+	SaSource       string
+	ProductName    string
+	ProductVersion string
+	SchemaVersion  string
+	OvalVersion    string
+	CopyRights     string
+	Class          string
+	Family         string
+	Productlist    string
+	Archlist       string
+)
+
+var (
+	// for DB connection
+	DBstr string
+	CNstr string
+)
+
+func init() {
+	// 1) Tell Viper where to find config.yaml
+	viper.SetConfigName("config")
+	viper.SetConfigType("yaml")
+	viper.AddConfigPath(".")
+	viper.AddConfigPath("/etc/ct-oval/")
+
+	if err := viper.ReadInConfig(); err != nil {
+		log.Fatalf("common: failed to read config file: %v", err)
+	}
+
+	// 2) Focus on the top‑level "common:" section
+	sub := viper.Sub("common")
+	if sub == nil {
+		log.Fatal("common: no 'common' section in config.yaml")
+	}
+
+	// 3) Populate vars from config
+	OSId = sub.GetString("os_id")
+	OSType = sub.GetString("os_type")
+	OSDefinitionStr = OSId + sub.GetString("definition_prefix")
+	OSTestStr = OSId + sub.GetString("test_prefix")
+	OSObjectStr = OSId + sub.GetString("object_prefix")
+	OSStateStr = OSId + sub.GetString("state_prefix")
+	OvalDef = sub.GetString("oval.def")
+	OvalCommon = sub.GetString("oval.common")
+	OvalUnixDef = sub.GetString("oval.unix")
+	OvalRedDef = sub.GetString("oval.linux")
+	OvalIndDef = sub.GetString("oval.independent")
+	XmlSchemaInstance = sub.GetString("oval.xsi")
+	XSISchemaLocation = sub.GetString("oval.xsi_schema_location")
+
+	CveRef = sub.GetString("references.cve_base")
+	SaRef = sub.GetString("references.sa_base")
+	CvelistAPI = sub.GetString("references.cvelist")
+	CvedetailAPI = sub.GetString("references.cvedetail")
+
+	Host = sub.GetString("product.host")
+	SaSource = sub.GetString("product.sa_source")
+	ProductName = sub.GetString("product.name")
+	ProductVersion = sub.GetString("product.version")
+	SchemaVersion = sub.GetString("product.schema_version")
+	OvalVersion = sub.GetString("product.oval_version")
+	CopyRights = sub.GetString("product.copyright")
+	Class = sub.GetString("product.class")
+	Family = sub.GetString("product.family")
+	Productlist = sub.GetString("product.versions")
+	Archlist = sub.GetString("product.arch")
+}
 
 func InitDB() (DBstr string, CNstr string) {
 	_, err := os.Stat("/etc/ct-oval/config.yaml")

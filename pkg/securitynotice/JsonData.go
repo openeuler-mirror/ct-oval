@@ -20,6 +20,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,11 +80,6 @@ type CveSummary struct {
 		Count int              `json:"count"`
 		List  []Summarycontent `json:"list"`
 	} `json:"data"`
-}
-
-type HttpResponse struct {
-	Code int                `json:"code"`
-	Data JsonSecurityNotice `json:"data"`
 }
 
 func parseJSONData(data []byte) (JsonSecurityNotice, error) {
@@ -184,7 +180,7 @@ func GenerateID(dbname string, value string, client *ent.Client) (string, error)
 		if object == nil {
 			num, _ := client.Object.Query().Count(context.Background())
 			//common obj number start with "3", openscap required non Zero start
-			newID := "oval:cn.ctyun.ctyunos:obj:" + fmt.Sprintf("3%011d", num)
+			newID := common.OSObjectStr + fmt.Sprintf("3%011d", num)
 			obj, _ := client.Object.Create().SetObjectID(newID).SetName(value).Save(context.Background())
 			return obj.ObjectID, err
 		} else {
@@ -195,7 +191,7 @@ func GenerateID(dbname string, value string, client *ent.Client) (string, error)
 		if state == nil {
 			num, _ := client.State.Query().Count(context.Background())
 			//common ste number start with "3", openscap required non Zero start
-			newID := "oval:cn.ctyun.ctyunos:ste:" + fmt.Sprintf("3%011d", num)
+			newID := common.OSStateStr + fmt.Sprintf("3%011d", num)
 			state, _ := client.State.Create().SetStateID(newID).SetValue(value).SetTag("evr").SetOperation("less than").SetDatatype("evr_string").Save(context.Background())
 			return state.StateID, err
 		} else {
@@ -206,7 +202,7 @@ func GenerateID(dbname string, value string, client *ent.Client) (string, error)
 		if test == nil {
 			num, _ := client.Test.Query().Count(context.Background())
 			//common tst number start with "3", openscap required non Zero start
-			newID := "oval:cn.ctyun.ctyunos:tst:" + fmt.Sprintf("3%011d", num)
+			newID := common.OSTestStr + fmt.Sprintf("3%011d", num)
 			items := strings.Split(value, " ")
 			obj, _ := client.Object.Query().Where(object.NameEQ(items[0])).First(context.Background())
 			state, _ := client.State.Query().Where(state.ValueEQ(items[len(items)-1])).First(context.Background())
@@ -270,6 +266,81 @@ func WriteState(version string, client *ent.Client) error {
 	return nil
 }
 
+// ProcessCsafFile orchestrates parsing a file and writing it to the database.
+func ProcessCsafFile(filePath string) (string, error) {
+	// Use the parser to get the unified data
+	var parser AdvisoryFileParser = &CSAFParser{}
+	// 调用接口要求的 ParseFile 方法
+	unifiedAdvisory, err := parser.ParseFile(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to parse advisory file: %w", err)
+	}
+
+	// Connect to the database (and handle seeding, as in the original)
+	db, err := common.ConnectDB()
+	if err != nil {
+		return "", fmt.Errorf("failed to connect to database: %w", err)
+	}
+	defer db.Close()
+
+	// Process packages to create Object, State, and Test records
+	var object_list, state_list, test_list string
+
+	for _, product := range unifiedAdvisory.Products {
+		for _, pkg := range product.Packages {
+			// Write individual records to the DB and get their IDs
+			if err := WriteObject(pkg.Name, db); err != nil {
+				return "", err
+			}
+			if err := WriteState(pkg.FixedVersion, db); err != nil {
+				return "", err
+			}
+			tid, err := WriteTest(pkg.Name+" is earlier than "+pkg.FixedVersion, db)
+			if err != nil {
+				return "", err
+			}
+
+			object_list += pkg.Name + " "
+			state_list += pkg.FixedVersion + " "
+			test_list += tid + " "
+		}
+	}
+
+	// Build the SecurityNotice struct for WriteOval
+	securityNotice := SecurityNotice{
+		// --- Data from UnifiedAdvisory ---
+		ID:               unifiedAdvisory.ID,
+		Title:            unifiedAdvisory.CVEs[0] + " " + unifiedAdvisory.Title,
+		Description:      unifiedAdvisory.Description,
+		AdvisorySeverity: unifiedAdvisory.Severity,
+		AdvisoryIssued:   unifiedAdvisory.IssuedDate,
+		Reference:        strings.Join(unifiedAdvisory.CVEs, " "),
+		AffectedPlatform: unifiedAdvisory.Products[0].Name, // Or logic to combine names
+
+		// --- Static/Config Data from 'common' package ---
+		ProductName:    common.ProductName,
+		ProductVersion: common.ProductVersion,
+		SchemaVersion:  common.SchemaVersion,
+		Version:        common.OvalVersion,
+		Class:          common.Class,
+		AffectedFamily: common.Family,
+		AdvisoryRights: common.CopyRights,
+		Archlist:       common.Archlist,
+
+		// --- Data from Step 3 (processed packages) ---
+		Object: strings.TrimSpace(object_list),
+		State:  strings.TrimSpace(state_list),
+		Test:   strings.TrimSpace(test_list),
+	}
+
+	// Call WriteOval with the fully constructed struct
+	if _, err := WriteOval(securityNotice, db); err != nil {
+		return "", fmt.Errorf("failed to write oval records: %w", err)
+	}
+
+	return securityNotice.ID, nil
+}
+
 // HandleSecurityNotice 处理安全通知，并存入数据库
 // 参数 jsonSecNotice JsonSecurityNotice 类型，包含安全通知的 JSON 结构体
 // 返回值 SecurityNotice 类型，表示处理后的安全通知信息结构体
@@ -290,38 +361,46 @@ func HandleSecurityNotice(jsonSecNotice JsonSecurityNotice) (string, error) {
 	if num == 0 {
 		log.Debug("Initializing tests table...")
 		for id, product := range strings.Split(common.Productlist, " ") {
-			db.Test.Create().SetComment("CTyunOS " + product + " is installed").SetTestID(fmt.Sprintf("oval:cn.ctyun.ctyunos:tst:20000000000%d", id+1)).SetObjectID("oval:cn.ctyun.ctyunos:obj:100000000001").SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:20000000000%d", id+1)).Save(context.Background())
+			db.Test.Create().SetComment(common.ProductName + product + " is installed").
+				SetTestID(fmt.Sprintf(common.OSTestStr+"20000000000%d", id+1)).
+				SetObjectID(common.OSObjectStr + "100000000001").
+				SetStateID(fmt.Sprintf(common.OSStateStr+"20000000000%d", id+1)).Save(context.Background())
 		}
 		for id, arch := range strings.Split(common.Archlist, " ") {
-			db.Test.Create().SetComment(fmt.Sprintf("CTyunOS Linux arch is %s", arch)).SetTestID(fmt.Sprintf("oval:cn.ctyun.ctyunos:tst:10000000000%d", id+1)).SetObjectID("oval:cn.ctyun.ctyunos:obj:100000000001").SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:10000000000%d", id+1)).Save(context.Background())
+			db.Test.Create().SetComment(fmt.Sprintf(common.ProductName+"arch is %s", arch)).
+				SetTestID(fmt.Sprintf(common.OSTestStr+"10000000000%d", id+1)).
+				SetObjectID(common.OSObjectStr + "100000000001").
+				SetStateID(fmt.Sprintf(common.OSStateStr+"10000000000%d", id+1)).Save(context.Background())
 		}
 	}
 	//如果Object表是新建的，则初始化入ctyunos-release, 它被产品安装及架构安装检测所共用
 	num, _ = db.Object.Query().Count(context.Background())
 	if num == 0 {
 		log.Debug("Initializing objects table...")
-		db.Object.Create().SetName("ctyunos-release").SetObjectID("oval:cn.ctyun.ctyunos:obj:100000000001").Save(context.Background())
+		db.Object.Create().SetName(common.ProductName + "-release").SetObjectID(common.OSObjectStr + "100000000001").Save(context.Background())
 	}
 	//如果State表是新建的，则初始化入系统安装状态值为product，架构判断状态值arch
 	num, _ = db.State.Query().Count(context.Background())
 	if num == 0 {
 		log.Debug("Initializing state table...")
 		for id, product := range strings.Split(common.Productlist, " ") {
-			db.State.Create().SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:20000000000%d", id+1)).SetDatatype("string").SetOperation("pattern match").SetTag("version").SetValue(product).Save(context.Background())
+			db.State.Create().SetStateID(fmt.Sprintf(common.OSStateStr+"20000000000%d", id+1)).
+				SetDatatype("string").SetOperation("pattern match").SetTag("version").SetValue(product).Save(context.Background())
 		}
 		for id, arch := range strings.Split(common.Archlist, " ") {
-			db.State.Create().SetStateID(fmt.Sprintf("oval:cn.ctyun.ctyunos:ste:10000000000%d", id+1)).SetDatatype("string").SetOperation("pattern match").SetTag("arch").SetValue(arch).Save(context.Background())
+			db.State.Create().SetStateID(fmt.Sprintf(common.OSStateStr+"10000000000%d", id+1)).
+				SetDatatype("string").SetOperation("pattern match").SetTag("arch").SetValue(arch).Save(context.Background())
 		}
 	}
 
 	// 初始化 SecurityNotice 结构体，先查在db中是否已经存在，若不存在，将SecurityNotice内数据写入数据表oval
-	ovalid := common.CTyunOSDefinitionStr + strings.ReplaceAll(jsonSecNotice.AnnouncementTime, "-", "")
+	ovalid := common.OSDefinitionStr + strings.ReplaceAll(jsonSecNotice.AnnouncementTime, "-", "")
 	ret := GetOvalID(ovalid, db)
 	if ret == "" {
 		// 初始化安全通知引用信息，并添加到 Reference 中，安全公告页面（CTyunOS-SA）有且仅有一条，特殊地放在第一位
 		var References []SecurityNoticeReference
 		SaRef := SecurityNoticeReference{
-			Source: "CTyunOS-SA",
+			Source: common.SaSource,
 			RefId:  jsonSecNotice.SecurityNoticeNo,
 			RefUrl: jsonSecNotice.NoticeURL,
 		}
@@ -350,6 +429,18 @@ func HandleSecurityNotice(jsonSecNotice JsonSecurityNotice) (string, error) {
 		object_list := ""
 		state_list := ""
 		test_list := ""
+		if len(jsonSecNotice.Files) == 0 {
+			jsonBytes, err := json.MarshalIndent(jsonSecNotice, "", "  ")
+			if err != nil {
+				log.Fatalf("序列化结构体失败: %v", err)
+			}
+			log.Debug("jsonSecNotice.Files, jsonSecNotice内容为:", string(jsonBytes))
+			return "", nil
+		}
+		if len(jsonSecNotice.Files[0].List) == 0 {
+			log.Debug("jsonSecNotice.Files[0].List 为空，没有可遍历的元素")
+			return "", nil
+		}
 		for _, file := range jsonSecNotice.Files[0].List {
 			// fmt.Println(file.FileName)
 			// fmt.Println(file.Version)
@@ -431,19 +522,22 @@ func HandleSecurityNotice(jsonSecNotice JsonSecurityNotice) (string, error) {
 // 返回值:
 // - error: 如果解析过程中遇到错误，则返回error；否则返回nil
 func ParseSecNoticeFromJson(filePath string) error {
-	// 解析json文件，放入JsonSecurityNotice结构体中
-	jsonSecurityNotice, err := parseJSONFile(filePath)
-	if err != nil {
-		log.Debug(jsonSecurityNotice)
-		return err // 如果解析文件时出错，则打印错误信息并返回错误
+	var SAfile string
+	var err error
+	switch common.OSType {
+	case "openeuler":
+		SAfile, err = ProcessCsafFile(filePath)
+	case "ctyunos":
+		var jsondata JsonSecurityNotice
+		jsondata, err = parseJSONFile(filePath)
+		SAfile = jsondata.SecurityNoticeNo
+	default:
+		return fmt.Errorf("unspport ostype:" + common.OSType)
 	}
-
-	// 将JsonSecurityNotice结构体数据写入ovals cverefs objects states tests数据表
-	ovalid, err := HandleSecurityNotice(jsonSecurityNotice)
 	if err != nil {
 		return err // 如果处理数据时出错，则打印错误信息并返回错误
 	}
-	log.Info(ovalid, " file is prceeded")
+	log.Debug(SAfile, " file is prceeded")
 	return nil // 如果没有错误，则返回nil
 }
 
@@ -486,30 +580,33 @@ func ParseSecNoticesFormJsonDir(dirPath string) error {
 }
 
 func Urlget(baseUrl string, structParam interface{}) []byte {
-	// 创建查询参数
-	queryParams := url.Values{}
-	v := reflect.ValueOf(structParam)
-	t := v.Type()
+	var urlWithParams = baseUrl
+	if structParam != nil {
+		// 创建查询参数
+		queryParams := url.Values{}
+		v := reflect.ValueOf(structParam)
+		t := v.Type()
 
-	// 遍历结构体字段，将字段名和值添加到查询参数
-	for i := 0; i < v.NumField(); i++ {
-		field := t.Field(i)
-		value := v.Field(i)
+		// 遍历结构体字段，将字段名和值添加到查询参数
+		for i := 0; i < v.NumField(); i++ {
+			field := t.Field(i)
+			value := v.Field(i)
 
-		// 使用 struct 标签中的 "query" 值作为查询参数的键名
-		queryKey := field.Tag.Get("query")
-		if queryKey == "" {
-			// 如果没有指定查询参数的键名，则使用字段名
-			queryKey = field.Name
+			// 使用 struct 标签中的 "query" 值作为查询参数的键名
+			queryKey := field.Tag.Get("query")
+			if queryKey == "" {
+				// 如果没有指定查询参数的键名，则使用字段名
+				queryKey = field.Name
+			}
+
+			// 将字段值转换为字符串并添加到查询参数
+			queryValue := fmt.Sprintf("%v", value.Interface())
+			queryParams.Add(queryKey, queryValue)
 		}
-
-		// 将字段值转换为字符串并添加到查询参数
-		queryValue := fmt.Sprintf("%v", value.Interface())
-		queryParams.Add(queryKey, queryValue)
+		// 构建带查询参数的 URL
+		urlWithParams += "?" + queryParams.Encode()
 	}
 
-	// 构建带查询参数的 URL
-	urlWithParams := baseUrl + "?" + queryParams.Encode()
 	req, err := http.NewRequest("GET", urlWithParams, nil)
 	if err != nil {
 		log.Fatal("Build HTTP Get request failed with Error: ", err)
@@ -534,7 +631,7 @@ func Urlget(baseUrl string, structParam interface{}) []byte {
 
 	// 检查响应状态码
 	if resp.StatusCode == http.StatusOK {
-		log.Debug("Request successful:", string(body))
+		//log.Debug("Request successful:", string(body))
 		return body
 	} else {
 		log.Error("Request failed with status: ", resp.StatusCode)
@@ -593,7 +690,74 @@ func Urlpost(baseUrl string, structParam interface{}) []byte {
 	}
 }
 
-func ParseRestfulUrl() error {
+func ParseOpeneulerUrl() error {
+	datefrom, _ := strconv.Atoi(viper.GetString(flag.KeyDateFrom))
+	dateto, _ := strconv.Atoi(viper.GetString(flag.KeyDateTo))
+
+	// 调用通用 GET 请求函数, 获取json摘要列表, 解析出json list
+	body := string(Urlget(common.CvelistAPI, nil))
+	body = strings.Replace(body, "\r\n", "\n", -1)
+	//body := `2023/csaf-openeuler-cve-2023-0597.json`
+	//log.Debug("body: ", string(body))
+	// 遍历 cvelist body
+	amount := 0
+	for _, content := range strings.Split(string(body), "\n") {
+		// 提取年份（每行的前4个字符）
+		if len(content) < 4 {
+			log.Debug("文件路径格式不正确，跳过:", content)
+			continue
+		}
+		yearStr := content[:4]
+		year, err := strconv.Atoi(yearStr)
+		if err != nil {
+			log.Debug("无法解析年份 %s", yearStr)
+			continue
+		}
+		// 检查年份是否在指定范围内
+		if year <= dateto && year >= datefrom {
+			fullurl := common.CvedetailAPI + content
+			log.Debug("starting:", fullurl)
+
+			// 1. 调用 Urlget 并检查请求错误（关键：处理网络/请求失败的情况）
+			body2 := Urlget(fullurl, nil) // 假设 Urlget 返回 ([]byte, error)
+			if body2 == nil {
+				return fmt.Errorf("Urlget failed for %s", fullurl)
+			}
+
+			// 2. 打印 body2 内容（调试用，确认是否为有效 JSON）
+			log.Debugf("API 返回内容: %s", string(body2))
+
+			// 3. 检查 body2 是否为空或明显无效（如空字符串）
+			if len(body2) == 0 {
+				return fmt.Errorf("API 返回空内容，url: %s", fullurl)
+			}
+
+			// 4. 尝试解析（若存在格式问题，可先简单清理，例如去除开头的无效字符）
+			var parser AdvisoryParser = &CSAFParser{}
+			csafstruct, err := parser.Parse(body2)
+			if err != nil {
+				// 详细打印错误和内容，便于定位问题
+				log.Debug("解析", fullurl, "失败, 内容:", string(body2), "错误:", err)
+				continue
+			}
+
+			oval := ConvertToJsonSecurityNotice(csafstruct)
+			ovalid, err := HandleSecurityNotice(oval)
+			if err != nil {
+				return fmt.Errorf("HandleSecurityNotice failed: %v", err) // 补充 %v 打印具体错误
+			}
+
+			log.Debug(ovalid, " detail is processed")
+			fmt.Printf(".")
+			amount += 1
+		}
+	}
+	fmt.Printf("\n")
+	log.Info(amount, " CVEs are prceeded successfully")
+	return nil
+}
+
+func ParseCtyunUrl() error {
 	type Urlparams struct {
 		Type             int    `json:"type,omitempty"`
 		From             string `json:"start_time,omitempty"`
@@ -602,6 +766,10 @@ func ParseRestfulUrl() error {
 		Keyword          string `json:"key_word,omitempty"`
 		SecurityNoticeNo string `json:"security_notice_no,omitempty"`
 		Pagesize         int    `json:"page_size,omitempty"`
+	}
+	type HttpResponse struct {
+		Code int                `json:"code"`
+		Data JsonSecurityNotice `json:"data"`
 	}
 	datefrom := viper.GetString(flag.KeyDateFrom)
 	dateto := viper.GetString(flag.KeyDateTo)
@@ -627,7 +795,7 @@ func ParseRestfulUrl() error {
 
 	// 调用通用 POST 请求函数, 获取json摘要列表, 解析出json list
 	log.Debug("params: ", fmt.Sprintf("%+v", params))
-	body := Urlpost(common.CvelistAPI+"list", params)
+	body := Urlpost(common.CvelistAPI, params)
 	var cvesummary CveSummary
 	err := json.Unmarshal(body, &cvesummary)
 	if err != nil {
@@ -639,7 +807,7 @@ func ParseRestfulUrl() error {
 	for _, content := range cvesummary.Data.List {
 		// Get cve detail from API
 		params = Urlparams{SecurityNoticeNo: content.SecurityNoticeNo}
-		body = Urlpost(common.CvelistAPI+"detail", params)
+		body = Urlpost(common.CvedetailAPI, params)
 
 		// 将API返回的body内容(json格式的)解析为jsonSecurityNotice结构体. 必须要将body转换成[]byte类型，否则json.Unmarshal会报错
 		var httpresponse HttpResponse
@@ -667,4 +835,15 @@ func ParseRestfulUrl() error {
 	fmt.Printf("\n")
 	log.Info(amount, " CVEs are prceeded successfully")
 	return nil
+}
+
+func ParseRestfulUrl() error {
+	switch common.OSType {
+	case "openeuler":
+		return ParseOpeneulerUrl()
+	case "ctyunos":
+		return ParseCtyunUrl()
+	default:
+		return fmt.Errorf("unspport ostype:" + common.OSType)
+	}
 }
