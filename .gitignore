@@ -8,6 +8,7 @@
 *.dll
 *.so
 *.dylib
+ct_oval_tool
 
 # Test binary, built with `go test -c`
 *.test
@@ -24,3 +25,4 @@ go.work
 .VSCodeCounter/
 sqlite.db
 CTyunos-oval.xml
+oval_ouput.xml
