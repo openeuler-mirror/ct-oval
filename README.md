@@ -5,12 +5,11 @@ The output xml file can be used as openscap source file. Check systems whether h
 
 # Contributors
 Leon Wang <wonleing@163.com><br>
-bai-muqing61 <mbai22@wisc.edu>
+bai-muqing61 <mbai22@wisc.edu><br>
 Yong Qin <qiny15@chinatelecom.cn><br>
 Copyright 2024 Chinatelecom CTyun Ltd.<br>
 
 # Base commands & Global flags
-CTyunOS OVAL CLI<br>
 Usage:<br>
   ct-oval [flags]<br>
   ct-oval [command]<br>
@@ -26,10 +25,10 @@ Available Commands:<br>
 
 Global Flags:<br>
   -d, --debug            Enable debug messages<br>
-      --from string      include elements revised on or after this day (format: YYYY-MM-DD) (default "1990-01-01")<br>
+      --from string      include elements revised on or after this day (format: YYYY-MM-DD, for openeuler default is 2023)<br>
   -h, --help             help for ct_oval<br>
-      --product string   generate oval for a single product (eg: ctyunos-2.0.1 ctyunos-23.01 all. "all" only works for parseurl) (default "ctyunos-2.0.1")<br>
-      --to string        include elements revised on or before this day (format: YYYY-MM-DD)<br>
+      --product string   generate oval for a single product (eg: ctyunos-2.0.1 ctyunos-23.01 all. default is "", means no filter for product)<br>
+      --to string        include elements revised on or before this day (format: YYYY-MM-DD, for openeuler default is 2025)<br>
 
 # ct-oval parse
 parse security notice from json files<br>
@@ -71,9 +70,9 @@ Available Commands:
 
 # Different new OS adapt
 ```
- clone and change config_<YourOS>.yaml
- change KeySource in cmd/flag/flag.go, now available for openeuler and ctyun, you can add your own OS
+ clone and change config_<YourOS>.yaml, copy it to config.yaml
  change pkg/securitynotice/JsonData.go, add Parse<YourOS>Url function and update ParseRestfulUrl function
+ add additonal 'transform' in pkg/securitynotice/AdvisoryParser.go when <YourOS> has different advisory format
 ```
 
 # Unit tests
